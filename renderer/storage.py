@@ -148,6 +148,9 @@ class GraphPersistence:
         created_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         quality_json = json.dumps(quality or {})
 
+        nodes_list = list(nodes)
+        edges_list = list(edges)
+
         with self._cursor() as cur:
             cur.execute(
                 """
@@ -159,7 +162,7 @@ class GraphPersistence:
 
             node_rows = [
                 (graph_id, next_version, node.id, json.dumps(asdict(node)))
-                for node in nodes
+                for node in nodes_list
             ]
             if node_rows:
                 cur.executemany(
@@ -169,7 +172,7 @@ class GraphPersistence:
 
             edge_rows = [
                 (graph_id, next_version, edge.id, json.dumps(asdict(edge)))
-                for edge in edges
+                for edge in edges_list
             ]
             if edge_rows:
                 cur.executemany(
@@ -180,8 +183,8 @@ class GraphPersistence:
         return GraphVersion(
             graph_id=graph_id,
             version=next_version,
-            nodes=list(nodes),
-            edges=list(edges),
+            nodes=nodes_list,
+            edges=edges_list,
             created_at=datetime.fromisoformat(created_at.replace("Z", "+00:00")),
             author_session=author_session,
             quality=json.loads(quality_json),
