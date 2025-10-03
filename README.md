@@ -13,6 +13,18 @@ This project provides a backend-focused toolkit for managing collaborative graph
 pip install -r requirements-dev.txt
 ```
 
+### Environment variables
+
+If you would like to augment entity extraction with a hosted large language model, provide the following environment variables before starting the API service:
+
+| Variable | Purpose |
+| --- | --- |
+| `DIAGRAM_LLM_API_KEY` | API key for the diagram extraction model (e.g. OpenAI). |
+| `DIAGRAM_LLM_BASE_URL` | Optional. Override the base URL for the LLM API (defaults to `https://api.openai.com/v1`). |
+| `DIAGRAM_LLM_MODEL` | Optional. Override the model name (defaults to `gpt-4o-mini`). |
+
+When these values are absent the service falls back to the built-in heuristic pipeline so tests and offline development continue to function.
+
 ## Running Tests
 
 ```bash
