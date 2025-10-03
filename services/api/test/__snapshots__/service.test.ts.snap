@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DiagramService > allows reformatting a diagram into a different format > formatted-mermaid-dsl 1`] = `
+"flowchart LR
+node_0[System]
+node_1[API Gateway]
+node_2[Auth Service]
+node_3[Data Lake]
+node_4[BI Dashboard]
+node_0 --> node_1
+node_1 --> node_2
+node_2 --> node_3
+node_3 --> node_4"
+`;
+
+exports[`DiagramService > creates session and generates mermaid DSL with guard rails > mermaid-dsl 1`] = `
+"flowchart LR
+node_0[Process]
+node_1[Validate]
+node_2[Schedule]
+node_0 --> node_1
+node_1 --> node_2"
+`;
+
+exports[`DiagramService > generates mindmap DSL when brainstorming context is detected > mindmap-dsl 1`] = `
+{
+  "edges": [
+    {
+      "label": null,
+      "source": "node_0",
+      "target": "node_1",
+    },
+    {
+      "label": null,
+      "source": "node_0",
+      "target": "node_2",
+    },
+    {
+      "label": null,
+      "source": "node_0",
+      "target": "node_3",
+    },
+  ],
+  "nodes": [
+    {
+      "id": "node_0",
+      "label": "Brainstorm",
+      "level": 0,
+    },
+    {
+      "id": "node_1",
+      "label": "Marketing Plan",
+      "level": 1,
+    },
+    {
+      "id": "node_2",
+      "label": "Engineering",
+      "level": 1,
+    },
+    {
+      "id": "node_3",
+      "label": "Customer Support",
+      "level": 2,
+    },
+  ],
+  "root": "node_0",
+}
+`;
