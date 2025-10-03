@@ -3,6 +3,7 @@ import { buildSystemPrompt } from './presets.js';
 import { buildContext, buildContract, computeDiffPatch } from './pipeline/dslBuilders.js';
 import { extractEntities } from './pipeline/entityExtractor.js';
 import { inferDiagramType } from './pipeline/diagramType.js';
+import { LLMEntityExtractor } from './llm/entityExtractor.js';
 import { SessionStore } from './sessionStore.js';
 import {
   DiagramContract,
@@ -23,9 +24,11 @@ interface ProcessResult {
 export class DiagramService {
   private store: SessionStore;
   private contexts = new Map<string, DiagramContext>();
+  private llmExtractor: LLMEntityExtractor;
 
-  constructor(store?: SessionStore) {
+  constructor(store?: SessionStore, llmExtractor?: LLMEntityExtractor) {
     this.store = store ?? new SessionStore();
+    this.llmExtractor = llmExtractor ?? new LLMEntityExtractor();
   }
 
   createSession(role: RolePreset): Session {
@@ -44,7 +47,7 @@ export class DiagramService {
     return this.contexts.get(sessionId);
   }
 
-  processMessage(input: MessageInput): ProcessResult {
+  async processMessage(input: MessageInput): Promise<ProcessResult> {
     const session = this.getSession(input.sessionId);
     if (!session) {
       throw new Error('Session not found');
@@ -54,8 +57,13 @@ export class DiagramService {
     const history = this.store.getHistory(input.sessionId);
     const combinedText = history.map((item) => item.content).join('\n');
 
-    const entities = extractEntities(combinedText);
-    const diagramType = inferDiagramType(entities, combinedText);
+    const llmExtraction = await this.llmExtractor.extract(
+      history.map((item) => ({ role: 'user', content: item.content })),
+      session.role,
+    );
+
+    const entities = llmExtraction?.entities?.length ? llmExtraction.entities : extractEntities(combinedText);
+    const diagramType = llmExtraction?.diagramType ?? inferDiagramType(entities, combinedText);
     const context = buildContext(entities, diagramType);
     const diff = computeDiffPatch(this.getContext(input.sessionId) ?? null, context);
     this.setContext(input.sessionId, context);

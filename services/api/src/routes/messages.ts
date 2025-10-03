@@ -14,7 +14,7 @@ export async function messagesRoutes(fastify: FastifyInstance, service: DiagramS
 
   fastify.post('/v1/messages', async (request, reply) => {
     const body = request.body as MessageBody;
-    const result = service.processMessage(body as MessageInput);
+    const result = await service.processMessage(body as MessageInput);
     return {
       ...result.contract,
       diff: result.diff,
@@ -26,12 +26,20 @@ export async function messagesRoutes(fastify: FastifyInstance, service: DiagramS
     connection.socket.on('message', (raw) => {
       try {
         const payload = JSON.parse(String(raw));
-        const result = service.processMessage(payload as MessageInput);
-        connection.socket.send(JSON.stringify({
-          type: 'diagram.update',
-          contract: result.contract,
-          diff: result.diff,
-        }));
+        Promise.resolve(service.processMessage(payload as MessageInput))
+          .then((result) => {
+            connection.socket.send(JSON.stringify({
+              type: 'diagram.update',
+              contract: result.contract,
+              diff: result.diff,
+            }));
+          })
+          .catch((error) => {
+            connection.socket.send(JSON.stringify({
+              type: 'error',
+              message: error instanceof Error ? error.message : 'Unknown error',
+            }));
+          });
       } catch (error) {
         connection.socket.send(JSON.stringify({
           type: 'error',

@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { DiagramService } from '../src/service.js';
 
 describe('DiagramService', () => {
-  it('creates session and generates mermaid DSL with guard rails', () => {
+  it('creates session and generates mermaid DSL with guard rails', async () => {
     const service = new DiagramService();
     const session = service.createSession('planner');
 
-    const result = service.processMessage({
+    const result = await service.processMessage({
       sessionId: session.id,
       content: 'Process order intake -> Validate payment -> Schedule delivery for client alice@example.com',
     });
@@ -19,11 +19,11 @@ describe('DiagramService', () => {
     expect(result.diff.addedNodes).toHaveLength(3);
   });
 
-  it('flags isolated nodes and masks PII', () => {
+  it('flags isolated nodes and masks PII', async () => {
     const service = new DiagramService();
     const session = service.createSession('analyst');
 
-    const result = service.processMessage({
+    const result = await service.processMessage({
       sessionId: session.id,
       content: 'Escalation contact 555-555-5555',
     });
@@ -33,11 +33,11 @@ describe('DiagramService', () => {
     expect(layoutLabels.join(' ')).not.toContain('555');
   });
 
-  it('generates mindmap DSL when brainstorming context is detected', () => {
+  it('generates mindmap DSL when brainstorming context is detected', async () => {
     const service = new DiagramService();
     const session = service.createSession('facilitator');
 
-    service.processMessage({
+    await service.processMessage({
       sessionId: session.id,
       content: 'Brainstorm ideas for launch including Marketing Plan, Engineering tasks, Customer Support readiness',
     });
@@ -47,11 +47,11 @@ describe('DiagramService', () => {
     expect(exportPayload.contract?.diagram.dsl).toMatchSnapshot('mindmap-dsl');
   });
 
-  it('allows reformatting a diagram into a different format', () => {
+  it('allows reformatting a diagram into a different format', async () => {
     const service = new DiagramService();
     const session = service.createSession('analyst');
 
-    service.processMessage({
+    await service.processMessage({
       sessionId: session.id,
       content: 'System components: API Gateway, Auth Service, Data Lake, BI Dashboard',
     });
