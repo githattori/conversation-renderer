@@ -117,6 +117,14 @@
   gap: 1rem;
 }
 
+.chat-actions-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .hint {
   color: #9ca3af;
   font-size: 0.8rem;
