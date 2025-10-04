@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { useAppStore } from '../state/store'
 import clsx from 'clsx'
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 
 const roleColors: Record<string, string> = {
   user: 'var(--accent)',
@@ -16,6 +17,19 @@ export const ChatPanel = () => {
   const appendHistory = useAppStore((state) => state.appendHistory)
   const toggleCommandPalette = useAppStore((state) => state.toggleCommandPalette)
   const activeRole = useAppStore((state) => state.activeRole)
+  const { supported: speechSupported, listening: isListening, start: startListening, stop: stopListening } =
+    useSpeechRecognition({
+      onResult: (transcript) => {
+        setInput((previous) => {
+          if (!previous) {
+            return transcript
+          }
+
+          const needsSpace = !previous.endsWith(' ') && !previous.endsWith('\n')
+          return `${previous}${needsSpace ? ' ' : ''}${transcript}`
+        })
+      },
+    })
 
   const sortedMessages = useMemo(() => chat.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [chat])
 
@@ -23,6 +37,9 @@ export const ChatPanel = () => {
     event.preventDefault()
     const trimmed = input.trim()
     if (!trimmed) return
+    if (isListening) {
+      stopListening()
+    }
     if (trimmed.startsWith('/')) {
       await executeCommand(trimmed)
     } else {
@@ -31,6 +48,12 @@ export const ChatPanel = () => {
     }
     setInput('')
   }
+
+  const hintMessage = speechSupported
+    ? isListening
+      ? 'Listening… tap the mic button to stop'
+      : 'Enter to send · Shift+Enter for newline · 🎙️ to dictate'
+    : 'Enter to send · Shift+Enter for newline'
 
   return (
     <section className="pane chat-pane">
@@ -64,8 +87,19 @@ export const ChatPanel = () => {
           rows={4}
         />
         <div className="chat-actions">
-          <span className="hint">Enter to send · Shift+Enter for newline</span>
-          <div>
+          <span className="hint">{hintMessage}</span>
+          <div className="chat-actions-buttons">
+            <button
+              className={clsx('ghost', { active: isListening })}
+              type="button"
+              onClick={() => (isListening ? stopListening() : startListening())}
+              disabled={!speechSupported}
+              aria-pressed={isListening}
+              aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+              title={speechSupported ? (isListening ? '音声入力を停止' : '音声入力を開始') : '音声入力はこのブラウザで利用できません'}
+            >
+              {isListening ? 'Listening…' : '🎙️ Voice'}
+            </button>
             <button className="ghost" type="button" onClick={() => toggleCommandPalette(true)}>
               Presets & Commands
             </button>
