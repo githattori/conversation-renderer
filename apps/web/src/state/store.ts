@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import { sendDiagramUpdate, emitOperationalTransform } from '../services/realtime'
-import { requestCommandExecution } from '../services/api'
+import {
+  ApiRolePreset,
+  MindmapDSL,
+  ProcessMessageResponse,
+  createSession,
+  processChatMessage,
+  requestCommandExecution,
+} from '../services/api'
 
 export type DiagramType = 'flowchart' | 'sequence' | 'mindmap'
 
@@ -66,6 +73,8 @@ export interface AppState {
   changeLog: HistoryEntry[]
   commandPaletteOpen: boolean
   activeRole: RolePreset | null
+  sessionId: string | null
+  isProcessingMessage: boolean
   rolePresets: RolePreset[]
   applyDiagramChange: (updater: (snapshot: DiagramSnapshot) => DiagramSnapshot, description: string) => void
   setDiagramType: (type: DiagramType) => void
@@ -82,6 +91,7 @@ export interface AppState {
   toggleCommandPalette: (open?: boolean) => void
   executeCommand: (command: string) => Promise<void>
   setRolePreset: (preset: RolePreset) => void
+  processUserMessage: (content: string) => Promise<void>
   canUndo: () => boolean
   canRedo: () => boolean
 }
@@ -124,6 +134,73 @@ const snapshotRootId = (snapshot: DiagramSnapshot): string | null => {
   return root ? root.id : null
 }
 
+const mapPresetToApiRole = (preset: RolePreset | null): ApiRolePreset => {
+  if (!preset) return 'analyst'
+  switch (preset.id) {
+    case 'pm':
+      return 'planner'
+    case 'facilitator':
+      return 'facilitator'
+    default:
+      return 'analyst'
+  }
+}
+
+const isMindmapDSL = (dsl: unknown): dsl is MindmapDSL => {
+  if (!dsl || typeof dsl !== 'object') return false
+  return 'nodes' in (dsl as Record<string, unknown>) && 'edges' in (dsl as Record<string, unknown>)
+}
+
+const buildMindmapNodesFromDSL = (dsl: MindmapDSL): DiagramNode[] => {
+  const parentMap = new Map<string, string | null>()
+  parentMap.set(dsl.root, null)
+  dsl.edges.forEach((edge) => {
+    parentMap.set(edge.target, edge.source)
+  })
+  return dsl.nodes.map((node) => ({
+    id: node.id,
+    parentId: parentMap.has(node.id)
+      ? parentMap.get(node.id) ?? null
+      : node.id === dsl.root
+        ? null
+        : dsl.root,
+    label: node.label ?? '',
+  }))
+}
+
+const contractToSnapshot = (result: ProcessMessageResponse, previous: DiagramSnapshot): DiagramSnapshot => {
+  if (result.diagram.format === 'mindmap' && isMindmapDSL(result.diagram.dsl)) {
+    return {
+      type: 'mindmap',
+      mermaid: previous.mermaid,
+      mindmapNodes: buildMindmapNodesFromDSL(result.diagram.dsl),
+    }
+  }
+
+  return {
+    type: previous.type === 'sequence' ? 'sequence' : 'flowchart',
+    mermaid: typeof result.diagram.dsl === 'string' ? result.diagram.dsl : previous.mermaid,
+    mindmapNodes: previous.mindmapNodes,
+  }
+}
+
+const buildAssistantSummary = (result: ProcessMessageResponse): string => {
+  const parts: string[] = []
+  const formatLabel = result.diagram.format === 'mindmap' ? 'mindmap' : 'mermaid'
+  parts.push(`Updated ${formatLabel} diagram.`)
+  parts.push(
+    `Nodes Δ +${result.diff.addedNodes.length} / -${result.diff.removedNodes.length}`,
+    `Edges Δ +${result.diff.addedEdges.length} / -${result.diff.removedEdges.length}`,
+  )
+  if (Number.isFinite(result.diagram.confidence)) {
+    parts.push(`Confidence ${Math.round(result.diagram.confidence * 100)}%`)
+  }
+  if (result.conflicts.length) {
+    parts.push(`Conflicts: ${result.conflicts.join('; ')}`)
+  }
+  return parts.join(' ')
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   chat: [],
   diagram: { past: [], present: cloneSnapshot(initialSnapshot), future: [] },
@@ -131,6 +208,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   changeLog: [buildHistoryEntry('Initial workspace ready')],
   commandPaletteOpen: false,
   activeRole: null,
+  sessionId: null,
+  isProcessingMessage: false,
   rolePresets,
   applyDiagramChange: (updater, description) => {
     const { diagram, changeLog } = get()
@@ -231,8 +310,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
     sendDiagramUpdate(next)
   },
-  canUndo: () => get().diagram.past.length > 0,
-  canRedo: () => get().diagram.future.length > 0,
   addChatMessage: (message) => {
     set((state) => ({
       chat: [
@@ -272,8 +349,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().appendHistory(`Command executed: ${trimmed}`)
   },
   setRolePreset: (preset) => {
-    set({ activeRole: preset })
+    set({ activeRole: preset, sessionId: null })
     get().appendHistory(`Role preset applied: ${preset.label}`)
     emitOperationalTransform({ type: 'session.role', payload: preset })
   },
+  processUserMessage: async (content) => {
+    const trimmed = content.trim()
+    if (!trimmed || get().isProcessingMessage) {
+      return
+    }
+    set({ isProcessingMessage: true })
+    try {
+      let sessionId = get().sessionId
+      if (!sessionId) {
+        const session = await createSession(mapPresetToApiRole(get().activeRole))
+        sessionId = session.id
+        set({ sessionId })
+      }
+      const result = await processChatMessage(sessionId, trimmed)
+      const previous = get().diagram.present
+      const snapshot = contractToSnapshot(result, previous)
+      get().applyDiagramChange(() => snapshot, `Diagram updated via LLM (${result.diagram.format})`)
+      get().addChatMessage({ role: 'assistant', content: buildAssistantSummary(result) })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      get().addChatMessage({ role: 'system', content: `Failed to update diagram: ${message}` })
+      get().appendHistory('LLM update failed')
+    } finally {
+      set({ isProcessingMessage: false })
+    }
+  },
+  canUndo: () => get().diagram.past.length > 0,
+  canRedo: () => get().diagram.future.length > 0,
 }))
