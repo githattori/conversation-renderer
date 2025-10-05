@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../state/store'
 import clsx from 'clsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
@@ -17,43 +17,88 @@ export const ChatPanel = () => {
   const appendHistory = useAppStore((state) => state.appendHistory)
   const toggleCommandPalette = useAppStore((state) => state.toggleCommandPalette)
   const activeRole = useAppStore((state) => state.activeRole)
+  const voiceDraftRef = useRef('')
+
+  const submitMessage = useCallback(
+    async (rawMessage: string) => {
+      const trimmed = rawMessage.trim()
+      if (!trimmed) {
+        return false
+      }
+
+      if (trimmed.startsWith('/')) {
+        await executeCommand(trimmed)
+      } else {
+        addChatMessage({ role: 'user', content: trimmed })
+        appendHistory('User message captured')
+      }
+
+      return true
+    },
+    [addChatMessage, appendHistory, executeCommand],
+  )
+
+  const handleVoiceResult = useCallback((transcript: string) => {
+    const sanitized = transcript.trim()
+    if (!sanitized) {
+      return
+    }
+
+    voiceDraftRef.current = voiceDraftRef.current
+      ? `${voiceDraftRef.current}${voiceDraftRef.current.endsWith(' ') ? '' : ' '}${sanitized}`
+      : sanitized
+  }, [])
+
   const { supported: speechSupported, listening: isListening, start: startListening, stop: stopListening } =
     useSpeechRecognition({
-      onResult: (transcript) => {
-        setInput((previous) => {
-          if (!previous) {
-            return transcript
-          }
-
-          const needsSpace = !previous.endsWith(' ') && !previous.endsWith('\n')
-          return `${previous}${needsSpace ? ' ' : ''}${transcript}`
-        })
-      },
+      onResult: handleVoiceResult,
     })
+
+  useEffect(() => {
+    if (isListening) {
+      return
+    }
+
+    const draft = voiceDraftRef.current.trim()
+    if (!draft) {
+      voiceDraftRef.current = ''
+      return
+    }
+
+    voiceDraftRef.current = ''
+    void submitMessage(draft)
+  }, [isListening, submitMessage])
 
   const sortedMessages = useMemo(() => chat.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [chat])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    const trimmed = input.trim()
-    if (!trimmed) return
+    const didSubmit = await submitMessage(input)
+    if (!didSubmit) {
+      return
+    }
+
     if (isListening) {
       stopListening()
     }
-    if (trimmed.startsWith('/')) {
-      await executeCommand(trimmed)
-    } else {
-      addChatMessage({ role: 'user', content: trimmed })
-      appendHistory('User message captured')
-    }
+
     setInput('')
+  }
+
+  const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter') return
+
+    if (event.metaKey || (!event.shiftKey && !event.ctrlKey && !event.altKey)) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
+    }
   }
 
   const hintMessage = speechSupported
     ? isListening
       ? 'Listening… tap the mic button to stop'
-      : 'Enter to send · Shift+Enter for newline · 🎙️ to dictate'
-    : 'Enter to send · Shift+Enter for newline'
+      : 'Voice messages send automatically · Enter or ⌘Enter to send · Shift+Enter for newline'
+    : 'Enter or ⌘Enter to send · Shift+Enter for newline'
 
   return (
     <section className="pane chat-pane">
@@ -83,6 +128,7 @@ export const ChatPanel = () => {
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleTextareaKeyDown}
           placeholder="Type messages or commands. Try /diagram mindmap"
           rows={4}
         />
