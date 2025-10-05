@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useMemo, useState } from 'react'
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../state/store'
 import clsx from 'clsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
@@ -17,19 +17,26 @@ export const ChatPanel = () => {
   const appendHistory = useAppStore((state) => state.appendHistory)
   const toggleCommandPalette = useAppStore((state) => state.toggleCommandPalette)
   const activeRole = useAppStore((state) => state.activeRole)
-  const { supported: speechSupported, listening: isListening, start: startListening, stop: stopListening } =
-    useSpeechRecognition({
-      onResult: (transcript) => {
-        setInput((previous) => {
-          if (!previous) {
-            return transcript
-          }
+  const {
+    supported: speechSupported,
+    listening: isListening,
+    start: startListening,
+    stop: stopListening,
+    transcript,
+  } = useSpeechRecognition()
 
-          const needsSpace = !previous.endsWith(' ') && !previous.endsWith('\n')
-          return `${previous}${needsSpace ? ' ' : ''}${transcript}`
-        })
-      },
-    })
+  useEffect(() => {
+    if (!isListening && transcript) {
+      setInput((previous) => {
+        if (!previous) {
+          return transcript
+        }
+
+        const needsSpace = !previous.endsWith(' ') && !previous.endsWith('\n')
+        return `${previous}${needsSpace ? ' ' : ''}${transcript}`
+      })
+    }
+  }, [isListening, transcript])
 
   const sortedMessages = useMemo(() => chat.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [chat])
 
@@ -37,9 +44,6 @@ export const ChatPanel = () => {
     event.preventDefault()
     const trimmed = input.trim()
     if (!trimmed) return
-    if (isListening) {
-      stopListening()
-    }
     if (trimmed.startsWith('/')) {
       await executeCommand(trimmed)
     } else {
