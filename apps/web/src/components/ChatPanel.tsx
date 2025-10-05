@@ -44,9 +44,6 @@ export const ChatPanel = () => {
     event.preventDefault()
     const trimmed = input.trim()
     if (!trimmed) return
-    if (isListening) {
-      stopListening()
-    }
     if (trimmed.startsWith('/')) {
       await executeCommand(trimmed)
     } else {
