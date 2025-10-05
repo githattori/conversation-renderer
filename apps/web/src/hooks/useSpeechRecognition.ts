@@ -48,9 +48,11 @@ export const useSpeechRecognition = ({
   const [supported, setSupported] = useState(false)
   const [listening, setListening] = useState(false)
   const [transcript, setTranscript] = useState('')
+  const [interimTranscript, setInterimTranscript] = useState('')
   const recognitionRef = useRef<RecognitionInstance | null>(null)
   const onResultRef = useRef<SpeechRecognitionCallback | undefined>(onResult)
   const transcriptRef = useRef('')
+  const interimTranscriptRef = useRef('')
 
   useEffect(() => {
     onResultRef.current = onResult
@@ -84,31 +86,47 @@ export const useSpeechRecognition = ({
     const handleResult = (event: unknown) => {
       const recognitionEvent = event as RecognitionEvent
       const result = recognitionEvent.results[recognitionEvent.resultIndex]
-      if (!result || !result.isFinal) return
+      if (!result) return
 
-      const transcript = Array.from({ length: result.length }, (_, index) => result[index]?.transcript.trim())
+      const transcriptChunk = Array.from({ length: result.length }, (_, index) => result[index]?.transcript.trim())
         .filter(Boolean)
         .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
 
-      if (!transcript) return
+      if (!transcriptChunk) {
+        return
+      }
 
-      transcriptRef.current = transcriptRef.current
-        ? `${transcriptRef.current} ${transcript}`.replace(/\s+/g, ' ').trim()
-        : transcript
+      if (result.isFinal) {
+        interimTranscriptRef.current = ''
+        setInterimTranscript('')
 
-      setTranscript(transcriptRef.current)
+        transcriptRef.current = transcriptRef.current
+          ? `${transcriptRef.current} ${transcriptChunk}`.replace(/\s+/g, ' ').trim()
+          : transcriptChunk
 
-      if (onResultRef.current) {
-        onResultRef.current(transcript)
+        setTranscript(transcriptRef.current)
+
+        if (onResultRef.current) {
+          onResultRef.current(transcriptChunk)
+        }
+      } else {
+        interimTranscriptRef.current = transcriptChunk
+        setInterimTranscript(transcriptChunk)
       }
     }
 
     const handleEnd = () => {
       setListening(false)
+      interimTranscriptRef.current = ''
+      setInterimTranscript('')
     }
 
     const handleError = () => {
       setListening(false)
+      interimTranscriptRef.current = ''
+      setInterimTranscript('')
     }
 
     recognition.addEventListener('result', handleResult)
@@ -134,6 +152,8 @@ export const useSpeechRecognition = ({
     try {
       transcriptRef.current = ''
       setTranscript('')
+      interimTranscriptRef.current = ''
+      setInterimTranscript('')
       recognition.start()
       setListening(true)
     } catch (error) {
@@ -142,6 +162,8 @@ export const useSpeechRecognition = ({
         recognition.stop()
         transcriptRef.current = ''
         setTranscript('')
+        interimTranscriptRef.current = ''
+        setInterimTranscript('')
         recognition.start()
         setListening(true)
       }
@@ -154,6 +176,8 @@ export const useSpeechRecognition = ({
 
     recognition.stop()
     setListening(false)
+    interimTranscriptRef.current = ''
+    setInterimTranscript('')
   }, [])
 
   return {
@@ -162,5 +186,6 @@ export const useSpeechRecognition = ({
     start,
     stop,
     transcript,
+    interimTranscript,
   }
 }
