@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, KeyboardEvent, useMemo, useState } from 'react'
 import { useAppStore } from '../state/store'
 import clsx from 'clsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
@@ -49,11 +49,20 @@ export const ChatPanel = () => {
     setInput('')
   }
 
+  const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter') return
+
+    if (event.metaKey || (!event.shiftKey && !event.ctrlKey && !event.altKey)) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
+    }
+  }
+
   const hintMessage = speechSupported
     ? isListening
       ? 'Listening… tap the mic button to stop'
-      : 'Enter to send · Shift+Enter for newline · 🎙️ to dictate'
-    : 'Enter to send · Shift+Enter for newline'
+      : 'Enter or ⌘Enter to send · Shift+Enter for newline · 🎙️ to dictate'
+    : 'Enter or ⌘Enter to send · Shift+Enter for newline'
 
   return (
     <section className="pane chat-pane">
@@ -83,6 +92,7 @@ export const ChatPanel = () => {
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleTextareaKeyDown}
           placeholder="Type messages or commands. Try /diagram mindmap"
           rows={4}
         />
