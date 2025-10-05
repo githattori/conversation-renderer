@@ -47,8 +47,10 @@ export const useSpeechRecognition = ({
 }: UseSpeechRecognitionOptions = {}) => {
   const [supported, setSupported] = useState(false)
   const [listening, setListening] = useState(false)
+  const [transcript, setTranscript] = useState('')
   const recognitionRef = useRef<RecognitionInstance | null>(null)
   const onResultRef = useRef<SpeechRecognitionCallback | undefined>(onResult)
+  const transcriptRef = useRef('')
 
   useEffect(() => {
     onResultRef.current = onResult
@@ -88,7 +90,15 @@ export const useSpeechRecognition = ({
         .filter(Boolean)
         .join(' ')
 
-      if (transcript && onResultRef.current) {
+      if (!transcript) return
+
+      transcriptRef.current = transcriptRef.current
+        ? `${transcriptRef.current} ${transcript}`.replace(/\s+/g, ' ').trim()
+        : transcript
+
+      setTranscript(transcriptRef.current)
+
+      if (onResultRef.current) {
         onResultRef.current(transcript)
       }
     }
@@ -122,12 +132,16 @@ export const useSpeechRecognition = ({
     if (!recognition || listening) return
 
     try {
+      transcriptRef.current = ''
+      setTranscript('')
       recognition.start()
       setListening(true)
     } catch (error) {
       const domError = error as DOMException
       if (domError.name === 'InvalidStateError') {
         recognition.stop()
+        transcriptRef.current = ''
+        setTranscript('')
         recognition.start()
         setListening(true)
       }
@@ -147,5 +161,6 @@ export const useSpeechRecognition = ({
     listening,
     start,
     stop,
+    transcript,
   }
 }
