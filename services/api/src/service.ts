@@ -89,7 +89,7 @@ export class DiagramService {
     return applyGuardRails(buildContract(context, diff));
   }
 
-  exportSession(sessionId: string): Record<string, unknown> {
+  exportSession(sessionId: string): { session: Session; history: MessageInput[]; contract: DiagramContract | null } {
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error('Session not found');

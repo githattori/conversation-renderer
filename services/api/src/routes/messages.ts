@@ -23,7 +23,7 @@ export async function messagesRoutes(fastify: FastifyInstance, service: DiagramS
   });
 
   fastify.get('/v1/messages/stream', { websocket: true }, (connection) => {
-    connection.socket.on('message', (raw) => {
+    connection.socket.on('message', (raw: unknown) => {
       try {
         const payload = JSON.parse(String(raw));
         Promise.resolve(service.processMessage(payload as MessageInput))
