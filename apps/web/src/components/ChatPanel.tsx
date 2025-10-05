@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../state/store'
 import clsx from 'clsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
@@ -23,34 +23,69 @@ export const ChatPanel = () => {
     start: startListening,
     stop: stopListening,
     transcript,
-  } = useSpeechRecognition()
+    interimTranscript,
+  } = useSpeechRecognition({ interimResults: true })
+  const [isVoiceCapturing, setIsVoiceCapturing] = useState(false)
+  const [isVoiceSubmitting, setIsVoiceSubmitting] = useState(false)
+  const previousInputRef = useRef('')
 
   useEffect(() => {
-    if (!isListening && transcript) {
-      setInput((previous) => {
-        if (!previous) {
-          return transcript
-        }
+    if (!isVoiceCapturing || isVoiceSubmitting) return
 
-        const needsSpace = !previous.endsWith(' ') && !previous.endsWith('\n')
-        return `${previous}${needsSpace ? ' ' : ''}${transcript}`
-      })
+    const combinedTranscript = [transcript, interimTranscript].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+    if (combinedTranscript) {
+      setInput(combinedTranscript)
+    } else if (!isListening) {
+      setInput(previousInputRef.current)
     }
-  }, [isListening, transcript])
+  }, [interimTranscript, isListening, isVoiceCapturing, isVoiceSubmitting, transcript])
+
+  const sendMessage = useCallback(
+    async (content: string) => {
+      if (!content) return
+
+      if (content.startsWith('/')) {
+        await executeCommand(content)
+      } else {
+        addChatMessage({ role: 'user', content })
+        appendHistory('User message captured')
+      }
+      setInput('')
+    },
+    [addChatMessage, appendHistory, executeCommand],
+  )
+
+  useEffect(() => {
+    if (!isVoiceCapturing || isListening) return
+
+    const trimmed = transcript.trim()
+    if (!trimmed) {
+      setIsVoiceCapturing(false)
+      setIsVoiceSubmitting(false)
+      setInput(previousInputRef.current)
+      previousInputRef.current = ''
+      return
+    }
+
+    const dispatchVoiceMessage = async () => {
+      setIsVoiceSubmitting(true)
+      await sendMessage(trimmed)
+      setIsVoiceCapturing(false)
+      setIsVoiceSubmitting(false)
+      previousInputRef.current = ''
+    }
+
+    void dispatchVoiceMessage()
+  }, [isListening, isVoiceCapturing, sendMessage, transcript])
 
   const sortedMessages = useMemo(() => chat.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [chat])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
+    if (isVoiceSubmitting) return
     const trimmed = input.trim()
     if (!trimmed) return
-    if (trimmed.startsWith('/')) {
-      await executeCommand(trimmed)
-    } else {
-      addChatMessage({ role: 'user', content: trimmed })
-      appendHistory('User message captured')
-    }
-    setInput('')
+    await sendMessage(trimmed)
   }
 
   const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -63,10 +98,31 @@ export const ChatPanel = () => {
   }
 
   const hintMessage = speechSupported
-    ? isListening
-      ? 'Listening… tap the mic button to stop'
-      : 'Enter or ⌘Enter to send · Shift+Enter for newline · 🎙️ to dictate'
-    : 'Enter or ⌘Enter to send · Shift+Enter for newline'
+    ? isVoiceCapturing
+      ? '音声入力中…話し終えると自動的に送信されます'
+      : 'Enter または ⌘Enter で送信 · Shift+Enter で改行 · 🎙️ で音声入力'
+    : 'Enter または ⌘Enter で送信 · Shift+Enter で改行'
+
+  const displayedHint = isVoiceSubmitting
+    ? '音声入力を送信中…'
+    : isVoiceCapturing && !isListening
+      ? '音声入力を処理中…'
+      : hintMessage
+
+  const handleVoiceButtonClick = () => {
+    if (!speechSupported) return
+
+    if (isListening) {
+      stopListening()
+      return
+    }
+
+    previousInputRef.current = input
+    setIsVoiceCapturing(true)
+    setIsVoiceSubmitting(false)
+    setInput('')
+    startListening()
+  }
 
   return (
     <section className="pane chat-pane">
@@ -97,27 +153,54 @@ export const ChatPanel = () => {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleTextareaKeyDown}
-          placeholder="Type messages or commands. Try /diagram mindmap"
+          placeholder={
+            isVoiceCapturing || isVoiceSubmitting
+              ? '音声入力中です。話し終えると自動送信されます。'
+              : 'Type messages or commands. Try /diagram mindmap'
+          }
           rows={4}
+          className={clsx({ 'voice-capturing': isVoiceCapturing || isVoiceSubmitting })}
+          readOnly={isVoiceCapturing || isVoiceSubmitting}
+          aria-live={isVoiceCapturing || isVoiceSubmitting ? 'polite' : undefined}
         />
         <div className="chat-actions">
-          <span className="hint">{hintMessage}</span>
+          <span
+            className="hint"
+            aria-live="polite"
+            data-voice-active={isVoiceCapturing || isVoiceSubmitting}
+          >
+            {displayedHint}
+          </span>
           <div className="chat-actions-buttons">
             <button
-              className={clsx('ghost', { active: isListening })}
+              className={clsx('ghost', { active: isListening || isVoiceCapturing || isVoiceSubmitting })}
               type="button"
-              onClick={() => (isListening ? stopListening() : startListening())}
-              disabled={!speechSupported}
-              aria-pressed={isListening}
-              aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
-              title={speechSupported ? (isListening ? '音声入力を停止' : '音声入力を開始') : '音声入力はこのブラウザで利用できません'}
+              onClick={handleVoiceButtonClick}
+              disabled={!speechSupported || isVoiceSubmitting}
+              aria-pressed={isListening || isVoiceCapturing || isVoiceSubmitting}
+              aria-label={
+                isVoiceSubmitting
+                  ? '音声入力を送信中'
+                  : isListening
+                    ? '音声入力を停止'
+                    : '音声入力を開始'
+              }
+              title={
+                speechSupported
+                  ? isVoiceSubmitting
+                    ? '音声入力を送信中'
+                    : isListening || isVoiceCapturing
+                      ? '音声入力を停止'
+                      : '音声入力を開始'
+                  : '音声入力はこのブラウザで利用できません'
+              }
             >
-              {isListening ? 'Listening…' : '🎙️ Voice'}
+              {isVoiceSubmitting ? 'Sending…' : isListening ? 'Listening…' : '🎙️ Voice'}
             </button>
             <button className="ghost" type="button" onClick={() => toggleCommandPalette(true)}>
               Presets & Commands
             </button>
-            <button type="submit" className="primary">
+            <button type="submit" className="primary" disabled={isVoiceSubmitting}>
               Send
             </button>
           </div>
