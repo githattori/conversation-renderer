@@ -17,6 +17,8 @@ export const ChatPanel = () => {
   const appendHistory = useAppStore((state) => state.appendHistory)
   const toggleCommandPalette = useAppStore((state) => state.toggleCommandPalette)
   const activeRole = useAppStore((state) => state.activeRole)
+  const processUserMessage = useAppStore((state) => state.processUserMessage)
+  const isProcessingMessage = useAppStore((state) => state.isProcessingMessage)
   const {
     supported: speechSupported,
     listening: isListening,
@@ -46,13 +48,16 @@ export const ChatPanel = () => {
 
       if (content.startsWith('/')) {
         await executeCommand(content)
-      } else {
-        addChatMessage({ role: 'user', content })
-        appendHistory('User message captured')
+        setInput('')
+        return
       }
+      if (isProcessingMessage) return
+      addChatMessage({ role: 'user', content })
+      appendHistory('User message captured')
       setInput('')
+      await processUserMessage(content)
     },
-    [addChatMessage, appendHistory, executeCommand],
+    [addChatMessage, appendHistory, executeCommand, isProcessingMessage, processUserMessage],
   )
 
   useEffect(() => {
@@ -82,7 +87,7 @@ export const ChatPanel = () => {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    if (isVoiceSubmitting) return
+    if (isVoiceSubmitting || isProcessingMessage) return
     const trimmed = input.trim()
     if (!trimmed) return
     await sendMessage(trimmed)
@@ -103,11 +108,13 @@ export const ChatPanel = () => {
       : 'Enter または ⌘Enter で送信 · Shift+Enter で改行 · 🎙️ で音声入力'
     : 'Enter または ⌘Enter で送信 · Shift+Enter で改行'
 
-  const displayedHint = isVoiceSubmitting
-    ? '音声入力を送信中…'
-    : isVoiceCapturing && !isListening
-      ? '音声入力を処理中…'
-      : hintMessage
+  const displayedHint = isProcessingMessage
+    ? 'LLM が図を更新しています…'
+    : isVoiceSubmitting
+      ? '音声入力を送信中…'
+      : isVoiceCapturing && !isListening
+        ? '音声入力を処理中…'
+        : hintMessage
 
   const handleVoiceButtonClick = () => {
     if (!speechSupported) return
@@ -159,9 +166,9 @@ export const ChatPanel = () => {
               : 'Type messages or commands. Try /diagram mindmap'
           }
           rows={4}
-          className={clsx({ 'voice-capturing': isVoiceCapturing || isVoiceSubmitting })}
-          readOnly={isVoiceCapturing || isVoiceSubmitting}
-          aria-live={isVoiceCapturing || isVoiceSubmitting ? 'polite' : undefined}
+          className={clsx({ 'voice-capturing': isVoiceCapturing || isVoiceSubmitting || isProcessingMessage })}
+          readOnly={isVoiceCapturing || isVoiceSubmitting || isProcessingMessage}
+          aria-live={isVoiceCapturing || isVoiceSubmitting ? 'polite' : isProcessingMessage ? 'polite' : undefined}
         />
         <div className="chat-actions">
           <span
@@ -176,7 +183,7 @@ export const ChatPanel = () => {
               className={clsx('ghost', { active: isListening || isVoiceCapturing || isVoiceSubmitting })}
               type="button"
               onClick={handleVoiceButtonClick}
-              disabled={!speechSupported || isVoiceSubmitting}
+              disabled={!speechSupported || isVoiceSubmitting || isProcessingMessage}
               aria-pressed={isListening || isVoiceCapturing || isVoiceSubmitting}
               aria-label={
                 isVoiceSubmitting
@@ -200,7 +207,7 @@ export const ChatPanel = () => {
             <button className="ghost" type="button" onClick={() => toggleCommandPalette(true)}>
               Presets & Commands
             </button>
-            <button type="submit" className="primary" disabled={isVoiceSubmitting}>
+            <button type="submit" className="primary" disabled={isVoiceSubmitting || isProcessingMessage}>
               Send
             </button>
           </div>

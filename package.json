@@ -12,12 +12,13 @@
   "dependencies": {
     "@fastify/websocket": "^8.3.1",
     "dagre": "^0.8.5",
+    "dotenv": "^17.2.3",
     "fastify": "^4.25.2",
     "nanoid": "^4.0.2"
   },
   "devDependencies": {
-    "@types/node": "^20.11.30",
     "@types/dagre": "^0.7.46",
+    "@types/node": "^20.11.30",
     "@vitest/coverage-v8": "^1.6.0",
     "tsx": "^4.7.1",
     "typescript": "^5.4.3",

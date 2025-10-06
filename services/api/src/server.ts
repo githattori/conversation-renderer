@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import Fastify from 'fastify';
 import { DiagramService } from './service.js';
 import { diagramRoutes } from './routes/diagram.js';
