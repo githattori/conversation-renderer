@@ -1,6 +1,7 @@
 import type { DiagramSnapshot } from '../state/store'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3333'
+// In dev, prefer relative path to use Vite proxy. Allow override via VITE_API_BASE_URL.
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
 
 const buildUrl = (path: string) => {
   const normalizedBase = API_BASE_URL.replace(/\/$/, '')

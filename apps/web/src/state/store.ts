@@ -177,8 +177,10 @@ const contractToSnapshot = (result: ProcessMessageResponse, previous: DiagramSna
     }
   }
 
+  // Backend currently returns mermaid flowchart when not mindmap.
+  // Always align the visualizer to flowchart in that case to avoid blank sequence rendering.
   return {
-    type: previous.type === 'sequence' ? 'sequence' : 'flowchart',
+    type: 'flowchart',
     mermaid: typeof result.diagram.dsl === 'string' ? result.diagram.dsl : previous.mermaid,
     mindmapNodes: previous.mindmapNodes,
   }
