@@ -23,6 +23,8 @@ pip install -r requirements-dev.txt
 | `DIAGRAM_LLM_BASE_URL` | 任意。LLM API のベース URL の上書き（既定: `https://api.openai.com/v1`） |
 | `DIAGRAM_LLM_MODEL` | 任意。モデル名の上書き（既定: `gpt-4o-mini`） |
 
+API キーが設定されると、`services/api/src/llm/entityExtractor.ts` 内の `LLMEntityExtractor` が OpenAI Responses API (`/responses` エンドポイント) に JSON スキーマ付きリクエストを送信し、分解されたステップ列を取得します。サービス層（`services/api/src/service.ts`）ではこの LLM 抽出結果を優先して使用し、失敗した場合にのみヒューリスティックな抽出器へフォールバックします。
+
 これらが未設定の場合でも、サービスは組み込みのヒューリスティックなパイプラインにフォールバックするため、テストやオフライン開発は継続可能です。
 
 ## テストの実行

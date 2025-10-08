@@ -59,6 +59,8 @@ export class LLMEntityExtractor {
       'You translate chat history into diagram inputs.',
       'Return strict JSON with fields: entities (array of concise node labels) and diagramType ("mermaid" or "mindmap").',
       'Prefer mermaid for procedural or sequential flows and mindmap for brainstorming or hierarchies.',
+      'For any procedural description, decompose the flow into distinct, chronological steps so that each entity represents a single action or state.',
+      'Keep each entity short (1-4 words) and never merge multiple steps into one label.',
       'Never include any additional text.',
     ].join(' ');
 

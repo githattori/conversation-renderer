@@ -23,6 +23,8 @@ If you would like to augment entity extraction with a hosted large language mode
 | `DIAGRAM_LLM_BASE_URL` | Optional. Override the base URL for the LLM API (defaults to `https://api.openai.com/v1`). |
 | `DIAGRAM_LLM_MODEL` | Optional. Override the model name (defaults to `gpt-4o-mini`). |
 
+Once an API key is present, the `LLMEntityExtractor` located in `services/api/src/llm/entityExtractor.ts` sends a JSON-schema constrained request to the OpenAI Responses API (`/responses`) and returns the decomposed step list. The service layer (`services/api/src/service.ts`) prefers this LLM output and only falls back to the heuristic extractor if the call is unavailable or fails.
+
 When these values are absent the service falls back to the built-in heuristic pipeline so tests and offline development continue to function.
 
 ## Running Tests
